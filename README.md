@@ -311,5 +311,8 @@ lrelease ../../share/qtcreator/translations/qtcreator_zh_CN.ts \
 
 ## 8. 许可
 
-- 插件本身与 Qt Creator 一致：GPL-3.0-only WITH Qt-GPL-exception-1.0。
-- `3rdparty/astyle/` 内为 Artistic Style 上游源码，**MIT** 许可，见 `3rdparty/astyle/LICENSE.md`。
+- 插件本身与 Qt Creator 一致：**GPL-3.0-only WITH Qt-GPL-exception-1.0**，
+  全文见 `LICENSES/LICENSE.GPL3-EXCEPT`。
+- `3rdparty/astyle/` 内为 Artistic Style 上游源码，**MIT** 许可，
+  见 `3rdparty/astyle/LICENSE.md`（副本：`LICENSES/MIT.txt`）。
+- 本插件与 The Qt Company 无关，未获其背书。

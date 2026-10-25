@@ -1,0 +1,13 @@
+The Astyle plugin for Qt Creator is licensed under the same terms as Qt
+Creator itself:
+
+    GPL-3.0-only WITH Qt-GPL-exception-1.0
+
+The full text, including the Qt Creator exception, is in
+LICENSES/LICENSE.GPL3-EXCEPT.
+
+The Artistic Style sources bundled in 3rdparty/astyle/ are licensed under the
+MIT license; see 3rdparty/astyle/LICENSE.md, a copy is in LICENSES/MIT.txt.
+
+Qt and Qt Creator are trademarks of The Qt Company Ltd. This plugin is not
+affiliated with or endorsed by The Qt Company.
