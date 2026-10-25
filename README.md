@@ -1,5 +1,8 @@
 # Artistic Style (astyle) 插件 —— Qt Creator 20.0.2
 
+A plugin for Qt Creator used to format source files with
+[Artistic Style](https://astyle.sourceforge.net/).
+
 把 [Artistic Style](https://astyle.sourceforge.net/)（下称 AStyle）以**静态库**方式内嵌进 Qt Creator，
 不依赖任何外部可执行文件、不需要临时文件、不 fork 进程，直接对**当前文件**或**当前工程的全部源文件**
 做格式化。
