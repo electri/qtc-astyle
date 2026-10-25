@@ -1,0 +1,19 @@
+{
+    "Id" : "astyle",
+    "DisplayName" : "Artistic Style",
+    "Name" : "Astyle",
+    "Version" : "${IDE_VERSION}",
+    "CompatVersion" : "${IDE_VERSION_COMPAT}",
+    "VendorId" : "qtc-astyle",
+    "Vendor" : "Astyle Plugin",
+    "Copyright" : "(C) 2026 The Astyle Plugin Authors",
+    "License" : [ "GNU General Public License Usage",
+                  "",
+                  "This plugin is distributed under the terms of the GNU General Public License version 3 as published by the Free Software Foundation, with the Qt Creator exception as present in the file LICENSE.GPL3-EXCEPT of the Qt Creator sources.",
+                  "",
+                  "The bundled Artistic Style sources are licensed under the MIT license, see 3rdparty/astyle/LICENSE.md."
+    ],
+    "Description" : "Formats C, C++, Objective-C, C# and Java source files with the in-process Artistic Style library. Works on the current file or on all source files of the current project.",
+    "Url" : "https://astyle.sourceforge.net/",
+    ${IDE_PLUGIN_DEPENDENCIES}
+}

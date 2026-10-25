@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/astyle">
+        <file>images/settingscategory_astyle.png</file>
+        <file>images/settingscategory_astyle@2x.png</file>
+    </qresource>
+</RCC>
