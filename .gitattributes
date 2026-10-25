@@ -1,0 +1,12 @@
+# Normalise the plugin's own sources to LF.
+* text=auto eol=lf
+
+# The bundled Artistic Style sources keep the upstream CRLF line endings and
+# must not be rewritten: they are synced verbatim from
+# https://gitlab.com/saalen/astyle
+3rdparty/astyle/*.cpp -text
+3rdparty/astyle/*.h -text
+3rdparty/astyle/LICENSE.md -text
+
+*.png binary
+*.qm binary
