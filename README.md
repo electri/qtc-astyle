@@ -1,92 +1,99 @@
-# Artistic Style (astyle) 插件 —— Qt Creator 20.0.2
+# Artistic Style (astyle) plugin for Qt Creator 20.0.2
 
-A plugin for Qt Creator used to format source files with
+**English** | [简体中文](README-zh.md)
+
+A plugin for Qt Creator that formats source files with
 [Artistic Style](https://astyle.sourceforge.net/).
 
-把 [Artistic Style](https://astyle.sourceforge.net/)（下称 AStyle）以**静态库**方式内嵌进 Qt Creator，
-不依赖任何外部可执行文件、不需要临时文件、不 fork 进程，直接对**当前文件**或**当前工程的全部源文件**
-做格式化。
+Artistic Style (AStyle below) is embedded as a **static library**, so there is no external
+executable, no temporary file and no child process: the formatter runs in process on the
+**current file** or on **all source files of the current project**.
 
-- 参考工程：<https://gitee.com/zhouliqiu/qtc_astyle>（AStyle 2.04 + Qt Creator 8 时代的代码，已无法在新版下编译）
-- AStyle 上游源码：<https://gitlab.com/saalen/astyle>
-- 本插件内嵌版本：**AStyle 3.6.20**（MIT 许可），提交见 `3rdparty/astyle/VERSION.txt`
-- 仓库地址：<https://github.com/electri/qtc-astyle>
+- Original project: <https://gitee.com/zhouliqiu/qtc_astyle> (AStyle 2.04, written for the
+  Qt Creator 8 era, no longer compiles against current versions)
+- AStyle upstream: <https://gitlab.com/saalen/astyle>
+- Embedded version: **AStyle 3.6.20** (MIT), see `3rdparty/astyle/VERSION.txt`
+- Repository: <https://github.com/electri/qtc-astyle>
 
-> **仓库根目录 = Qt Creator 源码树里的 `src/plugins/astyle/`。**
-> 插件必须和 IDE 一起编译（`add_qtc_plugin` 宏、同 Qt、同编译器），所以用法是把它放进源码树：
+> **The repository root is `src/plugins/astyle/` of a Qt Creator source tree.**
+> The plugin has to be built together with the IDE (the `add_qtc_plugin` macro, the same Qt,
+> the same compiler), so the way to use it is to drop it into a source tree:
 
 ```bash
 cd <qtcreator-source>
 git clone https://github.com/electri/qtc-astyle.git src/plugins/astyle
 
-# 确认 src/plugins/CMakeLists.txt 里有这一行（按字母序插入）
+# Make sure src/plugins/CMakeLists.txt contains this line (inserted in alphabetical order)
 grep -q 'add_subdirectory(astyle)' src/plugins/CMakeLists.txt \
   || sed -i '/add_subdirectory(autotest)/i add_subdirectory(astyle)' src/plugins/CMakeLists.txt
 ```
 
-然后按第 2 节重新 cmake 配置 + 构建 `Astyle` 目标即可。
+Then reconfigure with CMake and build the `Astyle` target, as described in section 2.
 
 ---
 
-## 1. 目录结构
+## 1. Layout
 
 ```
-（仓库根 = 源码树的 src/plugins/astyle/）
+(repository root = src/plugins/astyle/ of the source tree)
 ├── CMakeLists.txt                     # add_qtc_plugin(Astyle ...)
-├── Astyle.json.in                     # 插件元数据（版本/依赖由 CMake 填充）
-├── astyle.qrc                         # 设置分类图标
-├── astyleconstants.h                  # 菜单/动作/设置页 ID
+├── Astyle.json.in                     # plugin metadata (version and dependencies filled in by CMake)
+├── astyle.qrc                         # settings category icon
+├── astyleconstants.h                  # menu, action and settings page ids
 ├── astyletr.h
-├── astyleformatter.h/.cpp             # 核心：调用 AStyle 库、BOM/编码/换行处理、选项校验
-├── astyleoptionhelp.h/.cpp            # 每个选项的悬浮提示（由官方手册生成，含 Before/After 对照）
-├── astylesettings.h/.cpp              # 选项页（AspectContainer）+ .astylerc 查找 + 选项拼装
-├── astyleplugin.cpp                   # IPlugin：菜单、动作、单文件格式化
-├── astyleprojectdialog.h/.cpp         # 整工程格式化对话框：文件列表/勾选/进度/逐文件结果
+├── astyleformatter.h/.cpp             # core: calls the AStyle library, BOM/encoding/line ending handling, option validation
+├── astyleoptionhelp.h/.cpp            # tooltip for every option (generated from the official manual, with Before/After)
+├── astylesettings.h/.cpp              # options page (AspectContainer) + .astylerc lookup + option assembly
+├── astyleplugin.cpp                   # IPlugin: menu, actions, single file formatting
+├── astyleprojectdialog.h/.cpp         # project wide dialog: file list, checkboxes, progress, per file result
 ├── images/settingscategory_astyle.png
-├── tools/gen_option_help.py           # 从 AStyle 官方手册重新生成上面的提示文本
-├── tools/fill_translations.py         # 译文表 + 把译文回填进 .ts
-├── tools/merge_into_qtcreator_ts.py   # 把插件的 .ts 上下文合并进 qtcreator_zh_CN.ts
-├── translations/astyle_zh_CN.ts       # 中文文案（上下文 QtC::Astyle，282 条）
-├── tests/standalone/                  # 独立的核心单元测试（不参与 Qt Creator 构建）
-└── 3rdparty/astyle/                   # AStyle 源码（ASTYLE_LIB 静态库，AstyleLib 目标）
+├── tools/gen_option_help.py           # regenerates the tooltips above from the official AStyle manual
+├── tools/fill_translations.py         # translation table + writes the translations back into the .ts
+├── tools/merge_into_qtcreator_ts.py   # merges the plugin .ts context into qtcreator_zh_CN.ts
+├── translations/astyle_zh_CN.ts       # Simplified Chinese texts (context QtC::Astyle, 282 messages)
+├── tests/standalone/                  # standalone core unit test (not part of the Qt Creator build)
+└── 3rdparty/astyle/                   # AStyle sources (static library with ASTYLE_LIB, target AstyleLib)
 ```
 
 ---
 
-## 2. 构建
+## 2. Building
 
-插件在 Qt Creator 源码树内构建，与 IDE 同 Qt / 同编译器，这是唯一可靠的发布方式。
+The plugin is built inside a Qt Creator source tree, with the same Qt and the same compiler as
+the IDE. That is the only reliable way to ship it.
 
 ```bash
-# 已配置好的构建目录
+# from an already configured build directory
 cmake --build <build-dir> --target Astyle
 ```
 
-Windows 下需要 MSVC 环境：从 **x64 Native Tools Command Prompt for VS** 里执行上面的命令，
-或先在普通 cmd 里 `call "<VS>\VC\Auxiliary\Build\vcvars64.bat"`。
+On Windows an MSVC environment is required: run the command above from the
+**x64 Native Tools Command Prompt for VS**, or `call "<VS>\VC\Auxiliary\Build\vcvars64.bat"`
+in a normal command prompt first.
 
-产物：
+Output:
 
 ```
 <build-dir>/lib/qtcreator/plugins/Astyle.dll
 ```
 
-安装（覆盖到已安装的 IDE 也可）：
+Installation (overwriting the copy of an installed IDE works as well):
 
 ```
 <QtCreator>/lib/qtcreator/plugins/Astyle.dll
 ```
 
-启动后可在 *Help > About Plugins* 中看到 “Artistic Style”。
+After startup the plugin appears as "Artistic Style" in *Help > About Plugins*.
 
-> **插件 Id 必须全小写**：`Astyle.json.in` 里的 `"Id"` 是 `astyle`（目标名 / DLL 文件名仍是 `Astyle`，
-> 二者无需一致）。Qt Creator 的 `PluginSpec` 会在 `id.isLower()` 校验失败时直接拒绝加载，
-> 弹窗提示 `Plugin id "Astyle" must be lowercase`。
+> **The plugin id has to be lowercase**: `"Id"` in `Astyle.json.in` is `astyle` (the target name
+> and the DLL file name remain `Astyle`; the two do not have to match). `PluginSpec` rejects a
+> plugin whose `id.isLower()` check fails and shows `Plugin id "Astyle" must be lowercase`.
 >
-> 另外：`Q_PLUGIN_METADATA(FILE "Astyle.json")` 只在 **moc 重跑**时才会重新读取 json，
-> 所以只改 `Astyle.json.in` 后必须顺手 `touch astyleplugin.cpp` 再构建，否则 ninja 会认为无事可做。
+> Also note that `Q_PLUGIN_METADATA(FILE "Astyle.json")` only re-reads the json when **moc runs
+> again**. After editing `Astyle.json.in` alone you must `touch astyleplugin.cpp` before building,
+> otherwise ninja considers the target up to date.
 
-### 核心单元测试（可选）
+### Core unit test (optional)
 
 ```bash
 cmake -S tests/standalone -B build/astest -G Ninja \
@@ -95,87 +102,100 @@ cmake --build build/astest
 build/astest/astyle-core-test
 ```
 
-测试直接编译插件里的 `astyleformatter.cpp`，覆盖：
+The test compiles `astyleformatter.cpp` directly and covers:
 
-- 设置页可能产生的**每一个** AStyle 开关都能被库识别（防止拼写错误导致运行期静默失败）
-- CRLF / LF / 末行无换行符的处理，行尾风格保持
-- GBK、UTF-8、UTF-8 BOM、UTF-16 LE BOM 格式化前后字节完整
-- 二次格式化幂等（同一文件反复格式化结果不变）
+- **Every** AStyle switch the options page can produce is accepted by the library (so a typo
+  cannot fail silently at run time)
+- CRLF / LF / missing final newline, and preservation of the line ending style
+- GBK, UTF-8, UTF-8 BOM and UTF-16 LE BOM stay byte identical across formatting
+- Formatting twice is idempotent (the result does not change on a second pass)
 
 ---
 
-## 3. 使用
+## 3. Usage
 
-菜单 **Tools > Artistic Style**：
+Menu **Tools > Artistic Style**:
 
-| 菜单项 | 说明 | 快捷键 |
+| Menu entry | Description | Shortcut |
 | --- | --- | --- |
-| Format Current File | 格式化当前编辑器里的整个文件，**保留光标、折叠、滚动位置，可 Ctrl+Z 撤销** | `Ctrl+Alt+F` |
-| Format Current Project... | 弹出**工程文件列表对话框**，勾选要格式化的文件后执行，直接写盘 | — |
-| Artistic Style Options... | 打开本插件的选项页 | — |
+| Format Current File | Formats the whole file in the current editor, **keeping the cursor, the folded blocks and the scroll position; undoable with Ctrl+Z** | `Ctrl+Alt+F` |
+| Format Current Project... | Opens the **project file list dialog**, formats the checked files and writes them to disk | — |
+| Artistic Style Options... | Opens the options page of this plugin | — |
 
-选项页位置：**Edit > Preferences > Artistic Style**（左侧独立分类）。
+The options page lives at **Edit > Preferences > Artistic Style** (a separate category on the left).
 
-### 整工程格式化对话框
+### Project wide dialog
 
-`Format Current Project...` 不再是“一句确认框全量格式化”，而是先列出工程里所有匹配扩展名的源文件：
+`Format Current Project...` no longer formats everything behind a single confirmation box. It
+first lists every source file of the project whose suffix matches:
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ 项目：[ plugin.pro            ▼ ]   ← 打开多个工程时才出现      │
-│ 筛选：[                        ]   ← 按文件名或目录过滤          │
+│ Project: [ plugin.pro         ▼ ]   ← only shown for several projects
+│ Filter:  [                     ]   ← filters by file name or directory
 ├───────────────────────────────────────────────────────────────┤
-│ ☑ **头文件 (12)**                                             │
+│ ☑ **Header files (12)**                                       │
 │    ☑ astyleformatter.h     src/plugins/astyle                 │
-│    ☑ astyleoptionhelp.h    src/plugins/astyle    有未保存的更改 │
-│ ☑ **源文件 (9)**                                              │
+│    ☑ astyleoptionhelp.h    src/plugins/astyle    has unsaved changes
+│ ☑ **Source files (9)**                                        │
 │    ☑ astyleplugin.cpp      src/plugins/astyle                 │
-│ ☐ **其他文件 (2)**                                            │
+│ ☐ **Other files (2)**                                         │
 │    ☐ astyle.qrc            src/plugins/astyle                 │
 ├───────────────────────────────────────────────────────────────┤
-│ [██████░░░░░░]                    已选择 21 / 23 个文件        │
-│                              [格式化] [停止] [关闭]            │
+│ [██████░░░░░░]                    21 of 23 files selected     │
+│                              [Format] [Stop] [Close]           │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-- 按**头文件 / 源文件 / 其他文件**分组，组节点三态勾选（`Qt::PartiallyChecked`），点组即全选/全不选；
-- 第三列实时显示每个文件的结果：`已改变` / `未改变` / `已跳过：<原因>` / `失败：<原因>` / `未处理`；
-- 运行中可 `停止`（`QFuture::cancel()`，已完成的结果保留），此时 `关闭` 先禁用；
-- 有未保存修改的文件会在列表里先标出来；点“格式化”时再询问 **保存并格式化 / 跳过这些文件 / 取消**，
-  选“跳过”的文件会被自动取消勾选，绝不覆盖未保存的编辑器内容；
-- 目录列显示**相对工程根目录**的路径，工程外的文件退化为绝对路径。
+- Files are grouped into **header / source / other**, and a group checkbox is tri-state
+  (`Qt::PartiallyChecked`); clicking the group selects or deselects all of its files.
+- The third column shows the result per file as it happens: `changed` / `unchanged` /
+  `skipped: <reason>` / `failed: <reason>` / `not processed`.
+- A running job can be stopped (`QFuture::cancel()`; results already produced are kept), and
+  `Close` is disabled while it runs.
+- Files with unsaved changes are marked in the list first. Pressing *Format* then asks whether to
+  **save and format**, **skip those files** or **cancel**; skipped files are deselected
+  automatically, so unsaved editor content is never overwritten.
+- The directory column shows paths **relative to the project root** and falls back to absolute
+  paths for files outside the project.
 
-设计参考 `gitee.com/zhouliqiu/qtc_astyle` 的 `CDlgFormatProject`（分组 + 勾选 + 状态列 + 进度），
-但文件来源改为 IDE 的 `Project::files(Project::SourceFiles)`——**不依赖 qmake 私有 API**，
-CMake / qmake / Meson 工程都能用；进度和状态直接从 `QFutureWatcher::resultReadyAt()` 取，不再用独立线程类。
+The design follows `CDlgFormatProject` from `gitee.com/zhouliqiu/qtc_astyle` (groups,
+checkboxes, status column, progress), but the file list comes from the IDE
+(`Project::files(Project::SourceFiles)`), so **no qmake private API is involved** and CMake,
+qmake and Meson projects all work. Progress and status are read straight from
+`QFutureWatcher::resultReadyAt()` instead of a separate worker class.
 
-### 选项页
+### Options page
 
-插件**只格式化 C++**，所以选项页只保留对 C++ 有意义的开关：所有源文件都以 `--mode=c`
-（AStyle 里的 C/C++ 模式）交给库，Java / C# / Objective-C / JS 模式与它们的专属选项
-（`--mode=java`、`--pad-method-colon`、`--join-lines` 之类）都不再出现。选项页按功能分了 7 页：
+The plugin **only formats C++**, so the options page keeps only the switches that mean something
+for C++: every file is handed to the library with `--mode=c` (the C/C++ mode of AStyle), and the
+Java / C# / Objective-C / JS modes and their dedicated options (`--mode=java`,
+`--pad-method-colon`, `--join-lines` and friends) are gone. The page is split into seven tabs:
 
-| 分页 | 内容 |
+| Tab | Contents |
 | --- | --- |
-| General | 预定义风格（`--style=`）、缩进方式与宽度、强制制表符宽度、续行缩进、条件语句最小缩进、续行最大缩进、最大行宽与度量方式、指针/引用对齐 |
-| Indentation | 类、访问修饰符、switch、case、namespace、括号后缩进、标签、第 1 列注释、预处理块/宏定义/条件编译的缩进，Tab 转空格 |
-| Spacing | 运算符、逗号、圆括号内/外/首个/空括号、函数头的填充；去掉括号与分号前的多余空格；`#include` 与 `!` 的填充方式 |
-| Braces | namespace/class/inline/extern "C"/do-while 的括号附着、收尾括号断行、增删括号、返回类型的附着与断行 |
-| Line Breaks | 块间空行、单行头断行、`else if` 断行（含“不额外缩进”）、逻辑运算符后断行、类成员间空行、保留单行块/语句 |
-| Blank Lines and Misc | 删除函数内空行、用缩进填充空行、连续空行上限、合并模板右尖括号、去掉块注释的 `*` 前缀 |
-| Files and Configuration | 参与整工程格式化的扩展名、`.astylerc` 支持、指定配置文件、附加自由选项 |
+| General | Predefined style (`--style=`), indentation kind and width, forced tab width, continuation indent, minimal conditional indent, maximal continuation indent, maximal line length and how it is measured, pointer/reference alignment |
+| Indentation | Indentation of classes, access modifiers, switch, case, namespaces, after parentheses, labels, column 1 comments, preprocessor blocks/defines/conditionals; convert tabs to spaces |
+| Spacing | Padding of operators, commas, inner/outer/first/empty parentheses, function headers; removing padding before parentheses and semicolons; padding of `#include` and `!` |
+| Braces | Brace attachment for namespace/class/inline/extern "C"/do-while, breaking closing braces, adding and removing braces, attaching and breaking return types |
+| Line Breaks | Empty lines between blocks, breaking one line headers, breaking `else if` (including "no extra indent"), breaking after logical operators, lines between class members, keeping one line blocks/statements |
+| Blank Lines and Misc | Deleting empty lines inside functions, filling empty lines with indentation, maximal consecutive empty lines, closing template brackets, removing the `*` prefix of block comments |
+| Files and Configuration | Suffixes that take part in project formatting, `.astylerc` support, an explicit configuration file, free form additional options |
 
-一共覆盖 AStyle 库模式下 **65 个对 C++ 有效**的开关；剩下没进界面的开关及原因见第 7 节。
+In total it covers **65 switches that are valid for C++** in library mode. Section 7 lists the
+switches that are not exposed and why.
 
-### 悬浮提示
+### Tooltips
 
-每个勾选框（以及 `Align pointers` / `Align references` 的每个条目）的悬浮提示包含：
+The tooltip of every checkbox (and of every entry of `Align pointers` / `Align references`)
+contains:
 
-1. 选项名与命令行短写，如 `--indent-switches / -S`；
-2. **Artistic Style 官方手册原文**对该选项作用的描述；
-3. 手册给出的**代码对照**，左右并排：左边 `Before`、右边 `After`，一眼看出勾选后的差异。
+1. The option name with its short form, for example `--indent-switches / -S`.
+2. The **wording of the official Artistic Style manual** describing what the option does.
+3. The **before/after code sample** from the manual, side by side, so the effect of ticking the
+   box is visible at a glance.
 
-例如 `Indent switch blocks` 的提示：
+For example the tooltip of `Indent switch blocks`:
 
 ```
 --indent-switches / -S
@@ -191,154 +211,187 @@ case 1:                            case 1:
 ...
 ```
 
-提示文本不是手写的，而是 `tools/gen_option_help.py` 从 **AStyle 官方手册**解析生成的，
-落在 `astyleoptionhelp.cpp`。手册比内置的 3.6.20 略新，所以脚本只取手册的**说明文字与示例**，
-选项拼写一律用内置库 `ASOptions::parseOption()` 真正接受的写法
-（例如手册里的 `--no-indent-if-after-else` 在本库中仍是 `--break-elseifs=no-indent`）。
-升级 AStyle 或手册时重新跑一次即可：
+The text is not written by hand: `tools/gen_option_help.py` parses the **official AStyle manual**
+and generates `astyleoptionhelp.cpp`. The manual is slightly newer than the embedded 3.6.20, so
+the script only takes its **explanations and samples** while the option spellings always follow
+what `ASOptions::parseOption()` of the embedded library really accepts (for instance the manual's
+`--no-indent-if-after-else` is still `--break-elseifs=no-indent` here). To upgrade AStyle or the
+manual, run it again:
 
 ```bash
 curl -sSLo /tmp/astyle.html https://astyle.sourceforge.net/astyle.html
 python tools/gen_option_help.py /tmp/astyle.html astyleoptionhelp.cpp
 ```
 
-### 选项生效顺序（后者覆盖前者）
+### Order in which options are applied (later wins)
 
-1. 选项页里的开关
-2. 语言模式：**固定追加 `--mode=c`**（插件只做 C++；后缀只决定哪些文件参与格式化，不影响模式）
-3. `.astylerc`：从**目标文件所在目录逐级向上**查找 `.astylerc` / `astylerc`（会一直找到磁盘根和主目录）
-4. 指定的配置文件（勾选 “Use specific configuration file” 时）
-5. “Additional options” 里手写的开关
+1. The switches on the options page.
+2. The language mode: **`--mode=c` is always appended** (the plugin only does C++; the suffix
+   only decides which files are formatted, not the mode).
+3. `.astylerc`: searched from the **directory of the target file upwards** through all parents
+   (including the drive root and the home directory).
+4. The explicit configuration file (when "Use specific configuration file" is ticked).
+5. Switches typed into "Additional options".
 
-因此工程里放一份 `.astylerc` 就能覆盖全局偏好，而 `Additional options` 永远拥有最终决定权。
-
----
-
-## 4. 实现要点
-
-**为什么不用 `ASConsole` / 外部进程？**
-`ASTYLE_LIB` 模式下编译的 AStyle 只保留库 API：`ASFormatter`、`ASBeautifier`、`ASEnhancer`、`ASOptions`，
-控制台前端（`main()`、`ASConsole`、`--suffix`/`--recursive` 等文件管理选项）被裁掉。插件通过官方 C 入口
-`AStyleMain()` 调用，选项串由 `ASOptions` 解析——**与命令行完全一致的选项语法**，包括 `.astylerc` 的注释与空白规则。
-
-**编码与换行**
-- 所有磁盘文件按**原始字节**送进库、原样取回，因此 GBK 等双字节编码不会损坏（AStyle 只增删 ASCII 空白/换行；
-  连尾字节恰好是 `}`(0x7D) 或 `\`(0x5C) 的 GBK 字也不会被当成语法，`tests/standalone` 有对应用例）。
-- UTF-8 BOM：剥离后格式化、结果再补回，避免 BOM 参与首行缩进计算。
-- UTF-16 LE/BE BOM：先转 UTF-8 格式化，再按原字节序写回（`AStyleMain` 只接受窄字符串）。
-- 行尾风格默认跟随原文件（AStyle 的 `LINEEND_DEFAULT`，逐行沿用输入的行尾），CRLF 工程不会被改成 LF。
-
-**单文件格式化**
-`TextEditor::updateEditorText()` 做差分替换而非整篇重设，光标、折叠块、滚动条位置都保留，且进入 undo 栈。
-
-**整工程格式化**
-- 先弹文件列表对话框（见上），只对勾选的文件动手。
-- 在 UI 线程一次性拼好每个文件的选项并**预校验**（同一份配置只校验一次），有错立刻中止并提示，不会毁掉半个工程。
-- `QtConcurrent::mapped` 并行格式化（AStyle 库无共享可变状态，线程安全），
-  每个结果通过 `QFutureWatcher::resultReadyAt(int)` 回到 UI 线程，逐条更新列表状态和进度条。
-- 回写规则：
-  - 文件在编辑器中打开 → 用**文档自己的编码**（`TextDocument::format().decode()`）把格式化结果解成文本，
-    再 `updateEditorText` + `save()`，编辑器不弹“已被外部修改”的对话框；
-  - 文档编码与磁盘字节对不上，或格式带 UTF-16/32 BOM（`QStringEncoder` 不回写 BOM）→ 改用
-    `FileSaver` 原样写字节 + `TextDocument::reload()`，**全程不转码**；
-  - 文件未打开 → `FileSaver` 原子写盘，纯字节，天然安全；
-  - 文件有**未保存修改** → 跳过并统计，绝不覆盖用户未保存的内容。
-
-  注意：以前这里统一用 `QString::fromUtf8()` 解格式化结果，GBK 源文件的中文会全部变成 U+FFFD 再存回，
-  一次“格式化当前项目”就能把整个工程的中文注释毁掉。
-- 结束后在 General Messages 中给出汇总：`N formatted, M unchanged, K skipped, J failed`，并列出失败原因。
+A `.astylerc` in a project therefore overrides the global preferences, and
+`Additional options` always has the last word.
 
 ---
 
-## 5. 与旧插件 qtc_astyle 的差异
+## 4. Implementation notes
 
-| 维度 | qtc_astyle（gitee） | 本插件 |
+**Why not `ASConsole` or an external process?**
+Built with `ASTYLE_LIB`, AStyle keeps only the library API: `ASFormatter`, `ASBeautifier`,
+`ASEnhancer`, `ASOptions`. The console front end (`main()`, `ASConsole`, file management options
+such as `--suffix` and `--recursive`) is compiled out. The plugin calls the official C entry
+point `AStyleMain()` and lets `ASOptions` parse the option string, which gives **exactly the
+command line option syntax**, including the comment and whitespace rules of `.astylerc`.
+
+**Encoding and line endings**
+- Every file on disk is passed to the library as **raw bytes** and taken back unchanged, so
+  double byte encodings such as GBK are safe (AStyle only inserts and removes ASCII whitespace
+  and line breaks; even a GBK character whose trailing byte happens to be `}` (0x7D) or `\`
+  (0x5C) is not mistaken for syntax, and `tests/standalone` has a case for that).
+- UTF-8 BOM: stripped before formatting and restored afterwards, so the BOM does not take part
+  in the first line indentation.
+- UTF-16 LE/BE with BOM: converted to UTF-8 for formatting and written back in the original byte
+  order (`AStyleMain` only takes narrow strings).
+- The line ending style follows the input file by default (AStyle's `LINEEND_DEFAULT`, which
+  copies the ending of each input line), so a CRLF project is not turned into LF.
+
+**Single file formatting**
+`TextEditor::updateEditorText()` performs a differential replacement instead of resetting the
+whole document, so the cursor, the folded blocks and the scroll position survive and the change
+lands on the undo stack.
+
+**Project wide formatting**
+- The file list dialog comes first (see above) and only the checked files are touched.
+- The options of every file are assembled and **validated up front** on the UI thread (one
+  validation per distinct configuration). A problem aborts the run immediately, so half a project
+  is never formatted.
+- `QtConcurrent::mapped` formats in parallel (the AStyle library has no shared mutable state and
+  is thread safe). Every result returns to the UI thread through
+  `QFutureWatcher::resultReadyAt(int)`, which updates the status column and the progress bar.
+- Writing back:
+  - File open in an editor: the result is decoded with the **encoding of the document**
+    (`TextDocument::format().decode()`), then `updateEditorText` + `save()`, so the editor does
+    not complain about an external modification.
+  - The document encoding cannot decode the bytes, or the format carries a UTF-16/32 BOM
+    (`QStringEncoder` does not write the BOM back): `FileSaver` writes the bytes untouched and
+    `TextDocument::reload()` picks them up, **without transcoding at all**.
+  - File not open: `FileSaver` writes atomically, pure bytes, safe by construction.
+  - File with **unsaved changes**: skipped and counted, never overwritten.
+- When the run ends, General Messages reports `N formatted, M unchanged, K skipped, J failed`
+  together with the failure reasons.
+
+  Note: this path used to decode the formatter output with `QString::fromUtf8()`. Every Chinese
+  character of a GBK source became U+FFFD and was saved back like that, so a single
+  "format current project" could destroy the comments of an entire project.
+
+---
+
+## 5. Differences to the old qtc_astyle plugin
+
+| Aspect | qtc_astyle (gitee) | This plugin |
 | --- | --- | --- |
-| Qt Creator | 8.x，`QTextCodec` 时代 | **20.0.2**，Qt 6.11，未使用任何已废弃 API |
-| AStyle | 2.04（内嵌源码） | **3.6.20**（最新，MIT） |
-| 选项页 | 多张 `.ui` 表单 + `QSettings` | `AspectContainer` + `Layouting`，与 IDE 设置页原生风格一致，支持即时 apply/cancel 脏标记 |
-| 选项传递 | 自行拼接命令行字符串 | 官方 `ASOptions` 解析 + 运行前校验，错误立即反馈 |
-| 整工程 | `QThread` + qmake 私有 API 取 `.pro` 文件表，自带 `CDlgFormatProject` | `QtConcurrent` 并行；文件表走 `Project::files()`，自带同样思路的勾选对话框（分组/筛选/状态列/停止） |
-| 编码 | `QStringConverter::System`（只认本地编码） | 字节级透传 + BOM 专项处理（GBK/UTF-8/UTF-16 均可） |
-| 单文件 | 重设整篇文本 | 差分替换，保留光标/折叠，可撤销 |
-| 构建 | 独立工程 `find_package(QtCreator)` | 源码树内 `add_qtc_plugin`，与 IDE 同 Qt/同编译器 |
+| Qt Creator | 8.x, the `QTextCodec` era | **20.0.2**, Qt 6.11, no deprecated API |
+| AStyle | 2.04 (vendored) | **3.6.20** (current, MIT) |
+| Options page | several `.ui` forms plus `QSettings` | `AspectContainer` + `Layouting`, native look, immediate apply/cancel with dirty tracking |
+| Passing options | the plugin concatenates a command line string itself | parsed by the official `ASOptions`, validated before the run, errors reported right away |
+| Project wide | `QThread` plus the qmake private API to read the `.pro` file list, own `CDlgFormatProject` | `QtConcurrent` in parallel; the file list comes from `Project::files()`; a dialog in the same spirit (groups, filter, status column, stop) |
+| Encoding | `QStringConverter::System` (local encoding only) | byte level pass-through plus dedicated BOM handling (GBK, UTF-8 and UTF-16 all work) |
+| Single file | resets the whole document | differential replacement, keeps cursor and folding, undoable |
+| Build | standalone project with `find_package(QtCreator)` | `add_qtc_plugin` inside the source tree, same Qt and compiler as the IDE |
 
 ---
 
-## 6. 中文翻译
+## 6. Simplified Chinese translation
 
-Qt Creator 没有“每个插件一个 `.qm`”的机制：所有插件、所有库的文案最终都合进
-`share/qtcreator/translations/qtcreator_<lang>.ts`，构建期 `lrelease` 编译成
-`qtcreator_<lang>.qm`，`main.cpp` 启动时按界面语言加载 `resourcePath()/translations` 下的它。
-本插件按同样的方式接入，不需要在插件里自己装 `QTranslator`，也不需要改插件元数据。
+Qt Creator has no notion of one `.qm` per plugin: the texts of all plugins and libraries end up
+in `share/qtcreator/translations/qtcreator_<lang>.ts`, which `lrelease` compiles into
+`qtcreator_<lang>.qm` during the build. `main.cpp` loads it from
+`resourcePath()/translations` at startup according to the interface language. This plugin hooks
+into that mechanism, so it neither installs a `QTranslator` itself nor changes the plugin
+metadata.
 
-| 文件 | 作用 |
+| File | Purpose |
 | --- | --- |
-| `translations/astyle_zh_CN.ts` | 插件自己的 199 条文案（上下文 `QtC::Astyle`），可单独审阅 |
-| `tools/fill_translations.py` | 译文表（源文 → 中文）+ 回填脚本 |
-| `tools/merge_into_qtcreator_ts.py` | 把上述上下文合并进 `qtcreator_zh_CN.ts` |
+| `translations/astyle_zh_CN.ts` | the 282 texts of the plugin (context `QtC::Astyle`), reviewable on its own |
+| `tools/fill_translations.py` | translation table (source text to Chinese) plus the script that writes them back |
+| `tools/merge_into_qtcreator_ts.py` | merges the context above into `qtcreator_zh_CN.ts` |
 
-重新生成（改了源码里的 `tr()` 之后）：
+Regenerating after changing a `tr()` in the sources:
 
 ```bash
 cd src/plugins/astyle
 
-# 1. 从源码提取，生成/更新插件的 .ts。注意源文件必须写在 -ts 之前，
-#    否则 lupdate 会把它们当成输出文件，报 "has no recognized extension"
+# 1. Extract from the sources and update the plugin .ts. The source files must come
+#    before -ts, otherwise lupdate treats them as output files and reports
+#    "has no recognized extension"
 lupdate -locations relative -no-ui-lines *.cpp *.h -ts translations/astyle_zh_CN.ts
 
-# 2. 回填译文，脚本会报出漏掉的条目（输出 messages=199 missing=0 才算完整）
+# 2. Fill in the translations; the script reports missing entries
+#    (messages=282 missing=0 means complete)
 python tools/fill_translations.py translations/astyle_zh_CN.ts translations/astyle_zh_CN.ts
 
-# 3. 合并进主 .ts（按上下文名替换、按 lupdate 的排序插入，其余内容一个字节不动，可重复执行）
+# 3. Merge into the main .ts (replaces by context name and inserts in lupdate order,
+#    leaves every other byte alone, safe to repeat)
 python tools/merge_into_qtcreator_ts.py translations/astyle_zh_CN.ts \
        ../../share/qtcreator/translations/qtcreator_zh_CN.ts
 
-# 4. 重编 .qm 到构建目录（IDE 启动时从这里加载）
+# 4. Rebuild the .qm into the build directory (loaded at IDE startup)
 lrelease ../../share/qtcreator/translations/qtcreator_zh_CN.ts \
          -qm ../../build/qt611_vs2022_release/share/qtcreator/translations/qtcreator_zh_CN.qm
 ```
 
-翻译范围：
+What is translated:
 
-- 菜单与动作（`Artistic Style`、`格式化当前文件`、`格式化当前项目...`）、设置页全部标签/分组、
-  所有提示消息、进度与结果统计；
-- 65 条选项 tooltip 的**手册说明**与对照标题（`变为：`、`变为（align-pointer=type）：`）。
-  说明文字在 `astyleoptionhelp.cpp` 里用 `QT_TRANSLATE_NOOP("QtC::Astyle", ...)` 标记，
-  运行时经 `QCoreApplication::translate()` 查找；
-- **不翻译**：选项名（`--indent-classes / -C`）、Before/After 代码示例、以及 `Before`/`After`
-  两个列头——前两者必须与 AStyle 输出一致，后者参与等宽字体的列对齐。
+- Menus and actions (`Artistic Style`, `Format Current File`, `Format Current Project...`), all
+  labels and groups of the options page, every message, the progress and result counters.
+- The **manual description** of the 65 option tooltips and their comparison captions. The
+  descriptions are marked with `QT_TRANSLATE_NOOP("QtC::Astyle", ...)` in `astyleoptionhelp.cpp`
+  and looked up at run time through `QCoreApplication::translate()`.
+- **Not translated**: option names (`--indent-classes / -C`), the before/after code samples, and
+  the `Before`/`After` column headers. The first two have to match the AStyle output, the last
+  two take part in the column alignment of the monospaced font.
 
-切换语言：`编辑 > 首选项 > 环境 > 界面语言`，或启动参数 `-ui-language zh_CN`。
+Switching the language: *Edit > Preferences > Environment > Interface language*, or the
+`-ui-language zh_CN` command line argument.
 
-> 只把 `Astyle.dll` 拷到另一份 Qt Creator 安装里时，那份安装的
-> `share/qtcreator/translations/qtcreator_zh_CN.qm` 里没有这 282 条，界面会回落成英文；
-> 需要同步更新那边的 `.qm`（或按上面的步骤重新生成）。
-
----
-
-## 7. 已知限制
-
-- 只支持整文件格式化（不做选区/局部格式化）。
-- 没有“保存时自动格式化”（需要的话可以在 `EditorManager::aboutToSave` 上做扩展，与 Beautifier 插件类似）。
-- 未提供 qbs 构建脚本（Qt Creator 20 主线使用 CMake）。
-- 只格式化 **C++**（含 C 源文件，AStyle 的 `--mode=c` 同时覆盖两者）。Java / C# / Objective-C /
-  JS / GHC 模式及其专属选项（`--mode=java`、`--mode=cs`、`--mode=objc`、`--pad-method-colon`、
-  `--align-method-colon`、`--pad-param-type` 等）已从界面移除，插件不会按后缀切换语言。
-- AStyle 3.6 中 `--pad-brackets`、`--indent-lambda`、`--squeeze-ws`、`--preserve-ws`、`--lineend`、
-  `--suffix` 属于**控制台专有**选项（`astyle_main.cpp` 的 `#ifdef ASTYLE_LIB` 之前被截断），库模式下
-  一律被拒，所以没有放进界面。
-- `--indent=none` 与 `--remove-braces=one-line` 库模式**接受**，但官方手册没有为它们写章节，
-  没法给出与其它开关一致的“说明 + Before/After”提示，因此也没放进界面；需要时写进
-  “Additional options” 即可。
-- `.astylerc` 中的 `--options=`、`--suffix=`、`--recursive` 等文件管理选项在库模式下无效。
+> If only `Astyle.dll` is copied into another Qt Creator installation, that installation's
+> `share/qtcreator/translations/qtcreator_zh_CN.qm` does not contain these 282 messages and the
+> interface falls back to English. The `.qm` over there has to be updated as well (or regenerated
+> with the steps above).
 
 ---
 
-## 8. 许可
+## 7. Known limitations
 
-- 插件本身与 Qt Creator 一致：**GPL-3.0-only WITH Qt-GPL-exception-1.0**，
-  全文见 `LICENSES/LICENSE.GPL3-EXCEPT`。
-- `3rdparty/astyle/` 内为 Artistic Style 上游源码，**MIT** 许可，
-  见 `3rdparty/astyle/LICENSE.md`（副本：`LICENSES/MIT.txt`）。
-- 本插件与 The Qt Company 无关，未获其背书。
+- Only whole files can be formatted (no selection or range formatting).
+- There is no format on save (it could be added through `EditorManager::aboutToSave`, similar to
+  the Beautifier plugin).
+- No qbs build script is provided (the Qt Creator 20 mainline uses CMake).
+- Only **C++** is formatted (which includes C sources, `--mode=c` of AStyle covers both). Java,
+  C#, Objective-C, JS and GHC modes and their dedicated options (`--mode=java`, `--mode=cs`,
+  `--mode=objc`, `--pad-method-colon`, `--align-method-colon`, `--pad-param-type` and others)
+  have been removed from the interface, and the plugin never switches the language by suffix.
+- In AStyle 3.6 `--pad-brackets`, `--indent-lambda`, `--squeeze-ws`, `--preserve-ws`,
+  `--lineend` and `--suffix` are **console only** options (they sit behind the
+  `#ifdef ASTYLE_LIB` cut in `astyle_main.cpp`), so library mode always rejects them and they are
+  not exposed.
+- `--indent=none` and `--remove-braces=one-line` are **accepted** by the library, but the official
+  manual has no section for them, so a tooltip with the same "description plus before/after"
+  shape cannot be produced. They are not exposed either; write them into "Additional options" if
+  you need them.
+- File management options in `.astylerc` such as `--options=`, `--suffix=` and `--recursive` have
+  no effect in library mode.
+
+---
+
+## 8. License
+
+- The plugin itself follows Qt Creator: **GPL-3.0-only WITH Qt-GPL-exception-1.0**, full text in
+  `LICENSES/LICENSE.GPL3-EXCEPT`.
+- `3rdparty/astyle/` contains the upstream Artistic Style sources under the **MIT** license, see
+  `3rdparty/astyle/LICENSE.md` (copy in `LICENSES/MIT.txt`).
+- This plugin is not affiliated with, or endorsed by, The Qt Company.
