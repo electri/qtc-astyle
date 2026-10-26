@@ -22,6 +22,7 @@
 #include <utils/fancylineedit.h>
 #include <utils/fsengine/fileiconprovider.h>
 #include <utils/fileutils.h>
+#include <utils/textfileformat.h>
 
 #include <QComboBox>
 #include <QDir>
@@ -100,6 +101,35 @@ FileOutcome formatOneFile(const FileJob &job)
     return outcome;
 }
 
+// Replaces the file with exactly the bytes handed in. No encoding is involved
+// on this path, which is what makes it safe for GBK or UTF-16 sources.
+bool writeBytes(const FilePath &filePath, const QByteArray &contents, QString *error)
+{
+    FileSaver saver(filePath);
+    if (saver.hasError()) {
+        *error = saver.errorString();
+        return false;
+    }
+    if (!saver.write(contents)) {
+        *error = saver.errorString();
+        return false;
+    }
+    if (const Result<> res = saver.finalize(); !res) {
+        *error = res.error();
+        return false;
+    }
+    return true;
+}
+
+// QStringEncoder() does not write the byte order mark back out, and the
+// document save path only restores the UTF-8 one. Documents in a UTF-16 or
+// UTF-32 format therefore have to keep the byte for byte route.
+bool hasWideBom(const TextEncoding &encoding)
+{
+    const QByteArray name = encoding.name();
+    return name.startsWith("UTF-16") || name.startsWith("UTF-32");
+}
+
 // Writes the formatted text back, either into the open document (so that the
 // editor does not have to reload the file) or directly to disk.
 bool writeBack(const FileOutcome &outcome, const FilePath &filePath, QString *error)
@@ -115,41 +145,53 @@ bool writeBack(const FileOutcome &outcome, const FilePath &filePath, QString *er
             return false;
         }
 
-        QString text = QString::fromUtf8(outcome.contents);
-        text.replace("\r\n", "\n");
+        // Artistic Style keeps the byte stream of the file, so the result is
+        // still encoded like the file on disk and not in UTF-8. Decoding it
+        // with the format the document was opened with is mandatory: reading
+        // a GBK or UTF-16 file as UTF-8 turns every non-ASCII character into
+        // U+FFFD, and saving that back destroys the file.
+        const TextFileFormat format = textDocument->format();
+        QString text;
+        if (!hasWideBom(format.encoding()) && format.decode(outcome.contents, &text)) {
+            text.replace("\r\n", "\n");
 
-        const QList<Core::IEditor *> editors = Core::DocumentModel::editorsForDocument(document);
-        TextEditor::TextEditorWidget *widget = editors.isEmpty()
-                ? nullptr
-                : TextEditor::TextEditorWidget::fromEditor(editors.first());
-        if (widget) {
-            TextEditor::updateEditorText(widget, text);
-        } else if (const Result<> res = textDocument->setPlainText(text); !res) {
-            *error = res.error();
-            return false;
+            const QList<Core::IEditor *> editors
+                    = Core::DocumentModel::editorsForDocument(document);
+            TextEditor::TextEditorWidget *widget
+                    = editors.isEmpty()
+                    ? nullptr
+                    : TextEditor::TextEditorWidget::fromEditor(editors.first());
+            if (widget) {
+                TextEditor::updateEditorText(widget, text);
+            } else if (const Result<> res = textDocument->setPlainText(text); !res) {
+                *error = res.error();
+                return false;
+            }
+
+            if (const Result<> res = textDocument->save(); !res) {
+                *error = res.error();
+                return false;
+            }
+            return true;
         }
 
-        if (const Result<> res = textDocument->save(); !res) {
+        // Either the document was opened with an encoding that cannot
+        // represent the bytes on disk, or its format carries a byte order mark
+        // that a round trip would drop. Rewriting the whole file in that case
+        // is not acceptable, so write the bytes untouched and let the document
+        // pick them up again.
+        if (!writeBytes(filePath, outcome.contents, error))
+            return false;
+        const Result<> res = textDocument->reload(Core::IDocument::FlagReload,
+                                                  Core::IDocument::TypeContents);
+        if (!res) {
             *error = res.error();
             return false;
         }
         return true;
     }
 
-    FileSaver saver(filePath);
-    if (saver.hasError()) {
-        *error = saver.errorString();
-        return false;
-    }
-    if (!saver.write(outcome.contents)) {
-        *error = saver.errorString();
-        return false;
-    }
-    if (const Result<> res = saver.finalize(); !res) {
-        *error = res.error();
-        return false;
-    }
-    return true;
+    return writeBytes(filePath, outcome.contents, error);
 }
 
 void reportOptionProblems(const QStringList &problems, QWidget *parent)

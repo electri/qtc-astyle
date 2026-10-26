@@ -222,7 +222,8 @@ python tools/gen_option_help.py /tmp/astyle.html astyleoptionhelp.cpp
 `AStyleMain()` 调用，选项串由 `ASOptions` 解析——**与命令行完全一致的选项语法**，包括 `.astylerc` 的注释与空白规则。
 
 **编码与换行**
-- 所有磁盘文件按**原始字节**送进库、原样取回，因此 GBK 等双字节编码不会损坏（AStyle 只增删 ASCII 空白/换行）。
+- 所有磁盘文件按**原始字节**送进库、原样取回，因此 GBK 等双字节编码不会损坏（AStyle 只增删 ASCII 空白/换行；
+  连尾字节恰好是 `}`(0x7D) 或 `\`(0x5C) 的 GBK 字也不会被当成语法，`tests/standalone` 有对应用例）。
 - UTF-8 BOM：剥离后格式化、结果再补回，避免 BOM 参与首行缩进计算。
 - UTF-16 LE/BE BOM：先转 UTF-8 格式化，再按原字节序写回（`AStyleMain` 只接受窄字符串）。
 - 行尾风格默认跟随原文件（AStyle 的 `LINEEND_DEFAULT`，逐行沿用输入的行尾），CRLF 工程不会被改成 LF。
@@ -236,9 +237,15 @@ python tools/gen_option_help.py /tmp/astyle.html astyleoptionhelp.cpp
 - `QtConcurrent::mapped` 并行格式化（AStyle 库无共享可变状态，线程安全），
   每个结果通过 `QFutureWatcher::resultReadyAt(int)` 回到 UI 线程，逐条更新列表状态和进度条。
 - 回写规则：
-  - 文件在编辑器中打开 → 走 `TextDocument`/`updateEditorText` + `save()`，**不会**弹“文件已被外部修改”的对话框；
-  - 文件未打开 → `FileSaver` 原子写盘；
+  - 文件在编辑器中打开 → 用**文档自己的编码**（`TextDocument::format().decode()`）把格式化结果解成文本，
+    再 `updateEditorText` + `save()`，编辑器不弹“已被外部修改”的对话框；
+  - 文档编码与磁盘字节对不上，或格式带 UTF-16/32 BOM（`QStringEncoder` 不回写 BOM）→ 改用
+    `FileSaver` 原样写字节 + `TextDocument::reload()`，**全程不转码**；
+  - 文件未打开 → `FileSaver` 原子写盘，纯字节，天然安全；
   - 文件有**未保存修改** → 跳过并统计，绝不覆盖用户未保存的内容。
+
+  注意：以前这里统一用 `QString::fromUtf8()` 解格式化结果，GBK 源文件的中文会全部变成 U+FFFD 再存回，
+  一次“格式化当前项目”就能把整个工程的中文注释毁掉。
 - 结束后在 General Messages 中给出汇总：`N formatted, M unchanged, K skipped, J failed`，并列出失败原因。
 
 ---

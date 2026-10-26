@@ -118,6 +118,18 @@ static void checkEncodings()
     check(gbkResult.text.contains(QByteArray("\xd6\xd0\xce\xc4", 4)),
           "gbk: chinese bytes untouched");
 
+    // The second byte of a GBK character may well be a piece of ASCII syntax:
+    // 0x7d is '}', 0x5c is '\'. Those must not be parsed as a brace or as an
+    // escape, and the byte sequence has to come back unchanged.
+    QByteArray gbkTricky = "int f()\n{\nconst char *s = \"";
+    gbkTricky.append("\xd6\xd0\xbd\x7d\xb0\x5c", 6);
+    gbkTricky.append("\";\nreturn 0;\n}\n");
+    const FormatResult gbkTrickyResult = formatBytes(gbkTricky, "--style=allman");
+    check(gbkTrickyResult.ok, "gbk syntax bytes: formatting succeeded",
+          gbkTrickyResult.errors.join("; "));
+    check(gbkTrickyResult.text.contains(QByteArray("\xd6\xd0\xbd\x7d\xb0\x5c", 6)),
+          "gbk syntax bytes: braces and backslashes inside characters survive");
+
     // UTF-8
     QByteArray utf8 = QString::fromUtf8("// \xe4\xb8\xad\xe6\x96\x87\nint  main()\n{\nreturn 0;\n}\n").toUtf8();
     const FormatResult utf8Result = formatBytes(utf8, "--style=allman");
