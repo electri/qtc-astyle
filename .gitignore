@@ -30,3 +30,6 @@ ui_*.h
 # Python
 __pycache__/
 *.pyc
+
+# Local helper scripts (repo <-> source tree sync), not part of the plugin
+.local/

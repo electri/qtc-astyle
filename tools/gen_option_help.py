@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Generate astyleoptionhelp.cpp from the official Artistic Style manual.
 
-Source: AStyle 3.6.20 doc/astyle.html (the same version bundled in 3rdparty/astyle).
+Source: https://astyle.sourceforge.net/astyle.html, the manual of the version
+bundled in 3rdparty/astyle. The manual is slightly ahead of the library, so the
+option *spellings* written by this script are always the ones the bundled
+library accepts (see ASOptions::parseOption() in astyle_main.cpp); only the
+explanatory text comes from the manual.
+
 Run:    python gen_option_help.py <path to astyle.html> <output .cpp>
 """
 
@@ -14,22 +19,80 @@ import sys
 TR_CONTEXT = "QtC::Astyle"
 
 # Options shown in the settings page, in the order they appear there.
+# The plugin formats C++ only, so the Java/C#/Objective-C/scripting options of
+# the manual are deliberately absent.
 TOGGLES = [
-    "--indent-classes", "--indent-modifiers", "--indent-switches", "--indent-cases",
-    "--indent-namespaces", "--indent-labels", "--indent-preproc-block",
-    "--indent-preproc-define", "--indent-preproc-cond", "--indent-col1-comments",
-    "--pad-oper", "--pad-comma", "--pad-paren-out", "--pad-paren-in",
-    "--pad-first-paren-out", "--pad-header", "--unpad-paren", "--pad-include",
-    "--break-blocks", "--break-blocks=all", "--break-one-line-headers", "--break-elseifs",
-    "--keep-one-line-blocks", "--keep-one-line-statements",
-    "--attach-namespaces", "--attach-classes", "--attach-inlines", "--attach-extern-c",
-    "--convert-tabs", "--delete-empty-lines",
+    # -- General ------------------------------------------------------------
+    "--max-code-length-mode=",
+    "--min-conditional-indent=",
+    "--max-continuation-indent=",
+    "--indent=force-tab-x=",
+    "--indent-continuation=",
     # align-pointer / align-reference are combo boxes, but their entries get the same
     # "before / after" help as the check boxes.
     "--align-pointer=type", "--align-pointer=middle", "--align-pointer=name",
     "--align-reference=none", "--align-reference=type", "--align-reference=middle",
     "--align-reference=name",
+    # -- Indentation --------------------------------------------------------
+    "--indent-classes", "--indent-modifiers", "--indent-switches", "--indent-cases",
+    "--indent-namespaces", "--indent-after-parens", "--indent-labels",
+    "--indent-preproc-block", "--indent-preproc-define", "--indent-preproc-cond",
+    "--indent-col1-comments", "--convert-tabs",
+    # -- Spacing ------------------------------------------------------------
+    "--pad-oper", "--pad-comma",
+    "--pad-paren-out", "--pad-paren-in", "--pad-first-paren-out", "--pad-empty-paren",
+    "--pad-header", "--unpad-paren", "--pad-semicolon=none",
+    "--pad-include", "--pad-include=none", "--pad-negation", "--pad-negation=before",
+    # -- Braces -------------------------------------------------------------
+    "--attach-namespaces", "--attach-classes", "--attach-inlines", "--attach-extern-c",
+    "--attach-closing-while", "--break-closing-braces",
+    "--add-braces", "--add-one-line-braces", "--remove-braces",
+    "--attach-return-type", "--attach-return-type=decl",
+    "--break-return-type", "--break-return-type=decl",
+    # -- Line breaks --------------------------------------------------------
+    "--break-blocks", "--break-blocks=all", "--break-one-line-headers",
+    "--break-elseifs", "--break-elseifs=no-indent", "--break-after-logical",
+    "--line-between-members", "--line-between-members=all",
+    "--keep-one-line-blocks", "--keep-one-line-statements",
+    # -- Blank lines and miscellaneous --------------------------------------
+    "--delete-empty-lines", "--fill-empty-lines", "--squeeze-lines=",
+    "--close-templates", "--remove-comment-prefix",
 ]
+
+# Options whose manual section is filed under a different name.
+SECTION_ALIAS = {
+    "--break-elseifs=no-indent": "no-indent-if-after-else",
+    "--indent=force-tab-x=": "indent=force-tab-x",
+}
+
+# Options the manual documents under a name the bundled library does not accept.
+# Only the heading is replaced, the wording still comes from the manual.
+TITLE_OVERRIDE = {
+    "--break-elseifs=no-indent": "--break-elseifs=no-indent",
+}
+
+# Manual sections that head several options at once do not say which option a
+# sample belongs to. For those the sample is picked here.
+EXAMPLE_CAPTION = {
+    "--break-after-logical": "becomes (with break-after-logical):",
+}
+
+# The manual files --break-after-logical under --max-code-length and shares one
+# description for both, which reads badly for a separate check box. The wording
+# below is the paragraph the manual dedicates to the option.
+HAND_WRITTEN = {
+    "--break-after-logical": (
+        "--break-after-logical / -xL",
+        "By default logical conditionals will be placed first in the new line. "
+        "This option will cause the logical conditionals to be placed last on the "
+        "previous line. This option has no effect without --max-code-length.",
+        "if (thisVariable1 == thatVariable1\n        || thisVariable2 == thatVariable2\n"
+        "        || thisVariable3 == thatVariable3)\n    bar();",
+        "if (thisVariable1 == thatVariable1 ||\n        thisVariable2 == thatVariable2 ||\n"
+        "        thisVariable3 == thatVariable3)\n    bar();",
+        "becomes (with break-after-logical):",
+    ),
+}
 
 
 def strip_tags(s):
@@ -53,31 +116,49 @@ def norm_code(s):
     return "\n".join(line[indent:].replace("\t", "    ") for line in lines)
 
 
+def split_chunks(section):
+    """Split one <p id="_..."> region into the blocks that each introduce an
+    option. A region may document several options, sometimes in one paragraph
+    ("--line-between-members / --line-between-members=all") and sometimes in
+    separate paragraphs with their own description ("--pad-include" and
+    "--pad-include=none"). Both cases must keep their own text."""
+    starts = []
+    for m in re.finditer(r'<code class="title">', section):
+        open_p = section.rfind("<p", 0, m.start())
+        start = open_p if open_p >= 0 else m.start()
+        if not starts or starts[-1] != start:
+            starts.append(start)
+    return [section[start:starts[i + 1] if i + 1 < len(starts) else len(section)]
+            for i, start in enumerate(starts)]
+
+
 def load_sections(doc):
     src = io.open(doc, encoding="utf-8", errors="replace").read()
     marks = [(m.start(), m.group(1)) for m in re.finditer(r'<p id="_([^"]+)">', src)]
     sections = {}
     for i, (pos, name) in enumerate(marks):
         end = marks[i + 1][0] if i + 1 < len(marks) else len(src)
-        sections[name] = src[pos:end]
+        sections.setdefault(name, []).extend(split_chunks(src[pos:end]))
     return sections
 
 
-def parse_section(section):
-    title_match = re.search(r'<code class="title">(.*?)</code>', section, re.S)
-    title = norm_text(title_match.group(1)) if title_match else ""
-    div = section.find('<div class="code">')
-    head = section[:div] if div >= 0 else section
+def parse_chunk(chunk):
+    # Every heading of the block, then the shared description.
+    titles = [norm_text(t) for t in
+              re.findall(r'<code class="title">(.*?)</code>', chunk, re.S)]
+    title = "   ".join(titles)
+    div = chunk.find('<div class="code">')
+    head = chunk[:div] if div >= 0 else chunk
     desc = norm_text(re.sub(r'<code class="title">.*?</code>', "", head, flags=re.S))
 
     seq = []
     if div >= 0:
-        rest = section[div:]
+        rest = chunk[div:]
         pos = 0
         for m in re.finditer(r"<pre>(.*?)</pre>", rest, re.S):
-            chunk = rest[pos:m.start()]
-            if chunk:
-                seq.append(("text", norm_text(chunk)))
+            gap = rest[pos:m.start()]
+            if gap:
+                seq.append(("text", norm_text(gap)))
             seq.append(("code", norm_code(m.group(1))))
             pos = m.end()
         if rest[pos:]:
@@ -98,11 +179,11 @@ def parse_section(section):
             caption = seq[i - 1][1] if i > 0 and seq[i - 1][0] == "text" else ""
             examples.append((value, None, caption))
             i += 1
-    return title, desc, examples
+    return titles, title, desc, examples
 
 
 def short_title(option, title):
-    """Some sections head several values at once, e.g.
+    """Some blocks head several values at once, e.g.
     "--align-pointer=type / -k1   --align-pointer=middle / -k2   ...".
     Keep only the part that belongs to @p option."""
     index = title.find(option)
@@ -114,25 +195,45 @@ def short_title(option, title):
 
 
 def section_key(option, sections):
+    if option in SECTION_ALIAS:
+        return SECTION_ALIAS[option]
     key = option[2:]
-    if key in sections:
-        return key
-    underscored = key.replace("-", "_")
-    if underscored in sections:
-        return underscored
+    for candidate in (key, key.replace("-", "_"), key.split("=")[0]):
+        if candidate in sections:
+            return candidate
     return key.split("=")[0]
+
+
+def find_chunk(option, sections):
+    """Pick the block of the manual that documents @p option. Sections that
+    document several options are told apart by their heading."""
+    chunks = sections.get(section_key(option, sections))
+    if not chunks:
+        return None
+    for chunk in chunks:
+        if norm_text(chunk.split("</p>", 1)[0].replace('<code class="title">', "\n")
+                     .replace("</code>", "")) == option:
+            return chunk
+    wanted = option[2:]
+    for chunk in chunks:
+        if wanted in norm_text(chunk.split("</p>", 1)[0]):
+            return chunk
+    return chunks[0]
 
 
 def pick_example(option, examples):
     """For --foo=bar prefer the example whose caption mentions foo=bar.
 
-    Sections that document several values at once (align-pointer, align-reference,
-    ...) label their snippets with "becomes (with foo=bar):".  If none of the
-    labels matches, the manual has no example for this value, and showing the
-    first one would be wrong.
+    Sections that document several values at once label their snippets with
+    "becomes (with foo=bar):".  If none of the labels matches, the manual has no
+    example for this value, and showing the first one would be wrong.
     """
     if not examples:
         return "", None, ""
+    if option in EXAMPLE_CAPTION:
+        for before, after, caption in examples:
+            if (caption or "") == EXAMPLE_CAPTION[option]:
+                return before, after, caption
     if "=" in option:
         wanted = option[2:]
         for before, after, caption in examples:
@@ -165,22 +266,36 @@ def main():
 
     entries = []
     used = set()
+    missing = []
     for option in TOGGLES:
-        key = section_key(option, sections)
-        used.add(key)
-        title, desc, examples = parse_section(sections[key])
+        if option in HAND_WRITTEN:
+            entries.append((option,) + HAND_WRITTEN[option])
+            continue
+        chunk = find_chunk(option, sections)
+        if chunk is None:
+            missing.append(option)
+            continue
+        used.add(section_key(option, sections))
+        titles, title, desc, examples = parse_chunk(chunk)
         before, after, caption = pick_example(option, examples)
-        entries.append((option, short_title(option, title), desc, before, after, caption))
+        heading = TITLE_OVERRIDE.get(option) or short_title(option, title)
+        entries.append((option, heading, desc, before, after, caption))
+
+    if missing:
+        sys.exit("no manual section for: %s" % ", ".join(missing))
 
     lines = []
     lines.append("// Copyright (C) 2026 The Astyle Plugin Authors")
     lines.append("// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0")
     lines.append("")
-    lines.append("// Generated from the Artistic Style 3.6.20 manual (doc/astyle.html) that ships")
-    lines.append("// with the sources in 3rdparty/astyle. Do not edit the description texts by hand;")
-    lines.append("// they are quoted from the manual. The <pre> examples are the ones printed there")
-    lines.append("// under \"becomes:\". The manual wording is wrapped in QT_TRANSLATE_NOOP so that the")
+    lines.append("// Generated from the Artistic Style manual (https://astyle.sourceforge.net/astyle.html)")
+    lines.append("// by tools/gen_option_help.py. Do not edit the description texts by hand; they are")
+    lines.append("// quoted from the manual. The <pre> examples are the ones printed there under")
+    lines.append("// \"becomes:\". The manual wording is wrapped in QT_TRANSLATE_NOOP so that the")
     lines.append("// translations can translate it; option names and code samples stay untouched.")
+    lines.append("//")
+    lines.append("// The plugin formats C++ only, so the manual's Java, C#, Objective-C and scripting")
+    lines.append("// options are not listed here.")
     lines.append("")
     lines.append('#include "astyleoptionhelp.h"')
     lines.append("")

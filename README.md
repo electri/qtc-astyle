@@ -43,10 +43,10 @@ grep -q 'add_subdirectory(astyle)' src/plugins/CMakeLists.txt \
 ├── astyleplugin.cpp                   # IPlugin：菜单、动作、单文件格式化
 ├── astyleprojectdialog.h/.cpp         # 整工程格式化对话框：文件列表/勾选/进度/逐文件结果
 ├── images/settingscategory_astyle.png
-├── tools/gen_option_help.py           # 从 AStyle 手册 doc/astyle.html 重新生成上面的提示文本
+├── tools/gen_option_help.py           # 从 AStyle 官方手册重新生成上面的提示文本
 ├── tools/fill_translations.py         # 译文表 + 把译文回填进 .ts
 ├── tools/merge_into_qtcreator_ts.py   # 把插件的 .ts 上下文合并进 qtcreator_zh_CN.ts
-├── translations/astyle_zh_CN.ts       # 中文文案（上下文 QtC::Astyle，199 条）
+├── translations/astyle_zh_CN.ts       # 中文文案（上下文 QtC::Astyle，282 条）
 ├── tests/standalone/                  # 独立的核心单元测试（不参与 Qt Creator 构建）
 └── 3rdparty/astyle/                   # AStyle 源码（ASTYLE_LIB 静态库，AstyleLib 目标）
 ```
@@ -151,14 +151,21 @@ CMake / qmake / Meson 工程都能用；进度和状态直接从 `QFutureWatcher
 
 ### 选项页
 
-| 分组 | 内容 |
+插件**只格式化 C++**，所以选项页只保留对 C++ 有意义的开关：所有源文件都以 `--mode=c`
+（AStyle 里的 C/C++ 模式）交给库，Java / C# / Objective-C / JS 模式与它们的专属选项
+（`--mode=java`、`--pad-method-colon`、`--join-lines` 之类）都不再出现。选项页按功能分了 7 页：
+
+| 分页 | 内容 |
 | --- | --- |
-| Formatting Style | 预定义风格（`--style=`）、缩进方式（空格/制表符/强制制表符）、缩进宽度、续行缩进、最大行宽 |
-| Indentation | 类/访问修饰符/switch/case/namespace/标签/预处理块/预处理条件/第 1 列注释的缩进开关 |
-| Spacing and Alignment | 运算符、逗号、圆括号内外、函数头、`#include` 的填充；指针/引用对齐 |
-| Line Breaking | 块间空行、单行头断行、`else if` 断行、保留单行块/语句 |
-| Other | 花括号附着（namespace/class/inline/extern "C"）、Tab 转空格、删除空行 |
+| General | 预定义风格（`--style=`）、缩进方式与宽度、强制制表符宽度、续行缩进、条件语句最小缩进、续行最大缩进、最大行宽与度量方式、指针/引用对齐 |
+| Indentation | 类、访问修饰符、switch、case、namespace、括号后缩进、标签、第 1 列注释、预处理块/宏定义/条件编译的缩进，Tab 转空格 |
+| Spacing | 运算符、逗号、圆括号内/外/首个/空括号、函数头的填充；去掉括号与分号前的多余空格；`#include` 与 `!` 的填充方式 |
+| Braces | namespace/class/inline/extern "C"/do-while 的括号附着、收尾括号断行、增删括号、返回类型的附着与断行 |
+| Line Breaks | 块间空行、单行头断行、`else if` 断行（含“不额外缩进”）、逻辑运算符后断行、类成员间空行、保留单行块/语句 |
+| Blank Lines and Misc | 删除函数内空行、用缩进填充空行、连续空行上限、合并模板右尖括号、去掉块注释的 `*` 前缀 |
 | Files and Configuration | 参与整工程格式化的扩展名、`.astylerc` 支持、指定配置文件、附加自由选项 |
+
+一共覆盖 AStyle 库模式下 **65 个对 C++ 有效**的开关；剩下没进界面的开关及原因见第 7 节。
 
 ### 悬浮提示
 
@@ -184,19 +191,21 @@ case 1:                            case 1:
 ...
 ```
 
-提示文本不是手写的，而是 `tools/gen_option_help.py` 从 AStyle 源码包里的 `doc/astyle.html`
-（与 `3rdparty/astyle/` 同版本）解析生成的，落在 `astyleoptionhelp.cpp`。升级 AStyle 时重新跑一次即可：
+提示文本不是手写的，而是 `tools/gen_option_help.py` 从 **AStyle 官方手册**解析生成的，
+落在 `astyleoptionhelp.cpp`。手册比内置的 3.6.20 略新，所以脚本只取手册的**说明文字与示例**，
+选项拼写一律用内置库 `ASOptions::parseOption()` 真正接受的写法
+（例如手册里的 `--no-indent-if-after-else` 在本库中仍是 `--break-elseifs=no-indent`）。
+升级 AStyle 或手册时重新跑一次即可：
 
 ```bash
-# 3rdparty/astyle/ 只带编译所需的源码，没带上游的 doc/；
-# 先从 https://gitlab.com/saalen/astyle/-/tree/master/doc 取同版本的 astyle.html
-python tools/gen_option_help.py <path>/astyle.html astyleoptionhelp.cpp
+curl -sSLo /tmp/astyle.html https://astyle.sourceforge.net/astyle.html
+python tools/gen_option_help.py /tmp/astyle.html astyleoptionhelp.cpp
 ```
 
 ### 选项生效顺序（后者覆盖前者）
 
 1. 选项页里的开关
-2. 语言模式：按后缀自动追加 `--mode=c` / `cs` / `java` / `objc`
+2. 语言模式：**固定追加 `--mode=c`**（插件只做 C++；后缀只决定哪些文件参与格式化，不影响模式）
 3. `.astylerc`：从**目标文件所在目录逐级向上**查找 `.astylerc` / `astylerc`（会一直找到磁盘根和主目录）
 4. 指定的配置文件（勾选 “Use specific configuration file” 时）
 5. “Additional options” 里手写的开关
@@ -287,7 +296,7 @@ lrelease ../../share/qtcreator/translations/qtcreator_zh_CN.ts \
 
 - 菜单与动作（`Artistic Style`、`格式化当前文件`、`格式化当前项目...`）、设置页全部标签/分组、
   所有提示消息、进度与结果统计；
-- 37 条选项 tooltip 的**手册说明**与对照标题（`变为：`、`变为（align-pointer=type）：`）。
+- 65 条选项 tooltip 的**手册说明**与对照标题（`变为：`、`变为（align-pointer=type）：`）。
   说明文字在 `astyleoptionhelp.cpp` 里用 `QT_TRANSLATE_NOOP("QtC::Astyle", ...)` 标记，
   运行时经 `QCoreApplication::translate()` 查找；
 - **不翻译**：选项名（`--indent-classes / -C`）、Before/After 代码示例、以及 `Before`/`After`
@@ -296,7 +305,7 @@ lrelease ../../share/qtcreator/translations/qtcreator_zh_CN.ts \
 切换语言：`编辑 > 首选项 > 环境 > 界面语言`，或启动参数 `-ui-language zh_CN`。
 
 > 只把 `Astyle.dll` 拷到另一份 Qt Creator 安装里时，那份安装的
-> `share/qtcreator/translations/qtcreator_zh_CN.qm` 里没有这 199 条，界面会回落成英文；
+> `share/qtcreator/translations/qtcreator_zh_CN.qm` 里没有这 282 条，界面会回落成英文；
 > 需要同步更新那边的 `.qm`（或按上面的步骤重新生成）。
 
 ---
@@ -306,8 +315,15 @@ lrelease ../../share/qtcreator/translations/qtcreator_zh_CN.ts \
 - 只支持整文件格式化（不做选区/局部格式化）。
 - 没有“保存时自动格式化”（需要的话可以在 `EditorManager::aboutToSave` 上做扩展，与 Beautifier 插件类似）。
 - 未提供 qbs 构建脚本（Qt Creator 20 主线使用 CMake）。
-- AStyle 3.6 中 `--pad-brackets`、`--squeeze-ws` 等属于**控制台专有**选项，库模式下不可用，故未出现在界面中；
-  需要的开关可以写进 “Additional options”，若不被支持会在运行时给出明确报错。
+- 只格式化 **C++**（含 C 源文件，AStyle 的 `--mode=c` 同时覆盖两者）。Java / C# / Objective-C /
+  JS / GHC 模式及其专属选项（`--mode=java`、`--mode=cs`、`--mode=objc`、`--pad-method-colon`、
+  `--align-method-colon`、`--pad-param-type` 等）已从界面移除，插件不会按后缀切换语言。
+- AStyle 3.6 中 `--pad-brackets`、`--indent-lambda`、`--squeeze-ws`、`--preserve-ws`、`--lineend`、
+  `--suffix` 属于**控制台专有**选项（`astyle_main.cpp` 的 `#ifdef ASTYLE_LIB` 之前被截断），库模式下
+  一律被拒，所以没有放进界面。
+- `--indent=none` 与 `--remove-braces=one-line` 库模式**接受**，但官方手册没有为它们写章节，
+  没法给出与其它开关一致的“说明 + Before/After”提示，因此也没放进界面；需要时写进
+  “Additional options” 即可。
 - `.astylerc` 中的 `--options=`、`--suffix=`、`--recursive` 等文件管理选项在库模式下无效。
 
 ---

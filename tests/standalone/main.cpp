@@ -30,27 +30,46 @@ static void checkSwitches()
 {
     std::printf("[switches]\n");
 
+    // Everything the settings page can emit. The plugin formats C++ only, so
+    // --mode=c is the sole mode; the Java, C#, Objective-C and scripting modes
+    // and options are not reachable from the page any more.
     const QStringList switches = {
         "--style=allman", "--style=java", "--style=kr", "--style=stroustrup",
         "--style=whitesmith", "--style=vtk", "--style=ratliff", "--style=gnu",
         "--style=linux", "--style=horstmann", "--style=1tbs", "--style=google",
         "--style=mozilla", "--style=webkit", "--style=pico", "--style=lisp",
         "--indent=spaces=4", "--indent=tab=4", "--indent=force-tab=4",
-        "--indent-continuation=2", "--max-code-length=100",
+        "--indent=force-tab-x=8",
+        "--indent-continuation=2",
+        "--min-conditional-indent=0", "--min-conditional-indent=1",
+        "--min-conditional-indent=2", "--min-conditional-indent=3",
+        "--max-continuation-indent=40", "--max-continuation-indent=120",
+        "--max-code-length=50", "--max-code-length=200",
+        "--max-code-length-mode=code", "--max-code-length-mode=total",
+        "--max-code-length-mode=ignore-side-comments",
         "--indent-classes", "--indent-modifiers", "--indent-switches", "--indent-cases",
-        "--indent-namespaces", "--indent-labels", "--indent-preproc-block",
-        "--indent-preproc-define", "--indent-preproc-cond", "--indent-col1-comments",
+        "--indent-namespaces", "--indent-after-parens", "--indent-labels",
+        "--indent-preproc-block", "--indent-preproc-define", "--indent-preproc-cond",
+        "--indent-col1-comments", "--convert-tabs",
         "--pad-oper", "--pad-comma", "--pad-paren-out", "--pad-paren-in",
-        "--pad-first-paren-out", "--pad-header", "--unpad-paren", "--pad-include",
+        "--pad-first-paren-out", "--pad-empty-paren", "--pad-header", "--unpad-paren",
+        "--pad-semicolon=none", "--pad-include", "--pad-include=none",
+        "--pad-negation", "--pad-negation=before",
         "--align-pointer=type", "--align-pointer=middle", "--align-pointer=name",
         "--align-reference=none", "--align-reference=type", "--align-reference=middle",
         "--align-reference=name",
-        "--break-blocks", "--break-blocks=all", "--break-one-line-headers",
-        "--break-elseifs", "--keep-one-line-blocks", "--keep-one-line-statements",
         "--attach-namespaces", "--attach-classes", "--attach-inlines",
-        "--attach-extern-c",
-        "--convert-tabs", "--delete-empty-lines",
-        "--mode=c", "--mode=cs", "--mode=java", "--mode=objc",
+        "--attach-extern-c", "--attach-closing-while", "--break-closing-braces",
+        "--add-braces", "--add-one-line-braces", "--remove-braces",
+        "--attach-return-type", "--attach-return-type=decl",
+        "--break-return-type", "--break-return-type=decl",
+        "--break-blocks", "--break-blocks=all", "--break-one-line-headers",
+        "--break-elseifs", "--break-elseifs=no-indent", "--break-after-logical",
+        "--line-between-members", "--line-between-members=all",
+        "--keep-one-line-blocks", "--keep-one-line-statements",
+        "--delete-empty-lines", "--fill-empty-lines", "--squeeze-lines=1",
+        "--close-templates", "--remove-comment-prefix",
+        "--mode=c",
     };
 
     for (const QString &option : switches) {

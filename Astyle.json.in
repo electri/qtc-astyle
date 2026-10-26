@@ -13,7 +13,7 @@
                   "",
                   "The bundled Artistic Style sources are licensed under the MIT license, see 3rdparty/astyle/LICENSE.md."
     ],
-    "Description" : "Formats C, C++, Objective-C, C# and Java source files with the in-process Artistic Style library. Works on the current file or on all source files of the current project.",
+    "Description" : "Formats C++ source files with the in-process Artistic Style library. Works on the current file or on all source files of the current project. All Artistic Style switches that apply to C++ are available on the settings page.",
     "Url" : "https://astyle.sourceforge.net/",
     ${IDE_PLUGIN_DEPENDENCIES}
 }
